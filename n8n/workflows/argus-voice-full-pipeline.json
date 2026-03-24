@@ -1,0 +1,425 @@
+{
+  "name": "ARGUS Voice Full Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "whisper-1"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "file"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9cb029d1-b59a-48cf-a485-6ed8be9184d2",
+      "name": "STT (Whisper HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1344,
+        272
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "LrySrCrhsZ6JnTJt",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": {{ JSON.stringify($json.messages) }}\n}",
+        "options": {}
+      },
+      "id": "3a32cec0-2363-483e-8497-e0754bfbe56c",
+      "name": "GPT Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2064,
+        272
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "LrySrCrhsZ6JnTJt",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/speech",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini-tts\",\n  \"voice\": \"alloy\",\n  \"input\": \"{{ $('Code (add assistant)').item.json.response }}\"\n}",
+        "options": {}
+      },
+      "id": "b0f3731a-2999-4ccb-9ab3-f3cfdbd18afc",
+      "name": "TTS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1552,
+        512
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "LrySrCrhsZ6JnTJt",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voice",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        1120,
+        272
+      ],
+      "id": "f446dac0-ebb5-44a2-9ab0-d3de5d7d1951",
+      "name": "Webhook",
+      "webhookId": "a033f6d7-a38d-4d9b-a227-bd1029ef7d84"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2112,
+        512
+      ],
+      "id": "b8f34bbb-9251-41b7-bbf0-9f4c548f066e",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "binaryToPropery",
+        "destinationKey": "audio",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        1744,
+        512
+      ],
+      "id": "3dbf5ffe-db1b-44f2-bda4-8bb783e9080d",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "conversations"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "session_id",
+              "value": "={{$json.sessionId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1712,
+        272
+      ],
+      "id": "c7c5f8da-fd05-45d4-ae9a-1abca550f17c",
+      "name": "PostgreSQL (SELECT)",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "vAW446yotwYgCYxJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputs = $input.all();\n\n// separar inputs (Postgres)\nconst pg = inputs.find(i => i.json.messages !== undefined);\n\n// histórico vindo do PostgreSQL\nlet history = pg?.json?.messages || [];\n\n// garantir array\nif (typeof history === \"string\") {\n  try {\n    history = JSON.parse(history);\n  } catch {\n    history = [];\n  }\n}\n\n// 🔥 remover systems antigos (CRÍTICO)\nhistory = history.filter(m => m.role !== \"system\");\n\n// texto atual (STT)\nconst userText = $('STT (Whisper HTTP)').first().json.text || \"\";\n\n// DEBUG (opcional - podes ver se vem espanhol)\nconsole.log(\"STT TEXT:\", userText);\n\n// sessionId\nconst sessionId = $('Webhook').first().json.body.sessionId;\n\n// 🧠 system principal\nconst system = {\n  role: \"system\",\n  content: `\nÉs um assistente de voz que fala exclusivamente português de Portugal (PT-PT).\n\nResponde sempre em português europeu natural e nunca uses espanhol ou inglês.\n\nTens acesso ao histórico completo da conversa e deves utilizá-lo sempre.\n\nToda a informação fornecida anteriormente pelo utilizador (nome, preferências, contexto, respostas, etc.) é válida e deve ser considerada.\n\nNunca digas que não tens acesso a informações ou que não sabes algo se essa informação já foi fornecida nesta conversa.\n\nSe o utilizador fizer perguntas sobre algo já dito anteriormente, deves responder corretamente com base no histórico.\n\nMantém um tom natural, fluido e conversacional, usando linguagem simples e clara.\n\nUsa tratamento informal (tu), a menos que o utilizador indique o contrário.\n`\n};\n\n// 🔥 adicionar user UMA VEZ\nif (userText && userText.trim() !== \"\") {\n  history.push({\n    role: \"user\",\n    content: userText\n  });\n}\n\n// 🔥 reforço FINAL (super importante)\nconst languageGuard = {\n  role: \"system\",\n  content: \"IMPORTANTE: Responde sempre em português de Portugal. Nunca uses espanhol.\"\n};\n\n// 🔥 construir mensagens corretamente\nconst messages = [\n  system,\n  ...history,\n  languageGuard\n];\n\n// limitar histórico\nconst MAX_MESSAGES = 20;\n\nreturn [{\n  json: {\n    sessionId,\n    messages: messages.slice(-MAX_MESSAGES),\n    userText\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1888,
+        272
+      ],
+      "id": "d061d0f5-6781-4e24-8ad5-a5c504029552",
+      "name": "Code (build messages)"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// 🔥 buscar mensagens do node anterior (build messages)\nlet history = $('Code (build messages)').first().json.messages || [];\nconsole.log(\"HISTORY:\", history);\n// garantir array\nif (typeof history === \"string\") {\n  try {\n    history = JSON.parse(history);\n  } catch {\n    history = [];\n  }\n}\n\n// resposta do GPT\nconst response =\n  $json.choices?.[0]?.message?.content || \"\";\n\n// adicionar assistant\nhistory.push({\n  role: \"assistant\",\n  content: response\n});\n\nconst MAX_MESSAGES = 20;\n\nreturn {\n  json: {\n    sessionId: $('Webhook').first().json.body.sessionId,\n    messages: history.slice(-MAX_MESSAGES),\n    response\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        512
+      ],
+      "id": "e35a6c8b-2231-4350-9cee-7b9893c02694",
+      "name": "Code (add assistant)"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO conversations (session_id, messages, updated_at)\nVALUES (\n  '{{$node[\"Webhook\"].json.body.sessionId}}',\n  '{{$json.messages.toJsonString()}}'::jsonb,\n  NOW()\n)\nON CONFLICT (session_id)\nDO UPDATE SET\n  messages = '{{$json.messages.toJsonString()}}'::jsonb,\n  updated_at = NOW();",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1344,
+        512
+      ],
+      "id": "ffc234cf-f5c9-4a6a-a094-f3624a79f330",
+      "name": "PostgreSQL (UPSERT)",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "vAW446yotwYgCYxJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"sessionId\": \"{{ $('Webhook').item.json.body.sessionId }}\"\n}",
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1520,
+        272
+      ],
+      "id": "53db0561-eac1-4273-8ff7-f10a44f41581",
+      "name": "Extract Session",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fe9eee82-c933-44f3-806d-4c0246fa3ceb",
+              "name": "userText",
+              "value": "={{ $('STT (Whisper HTTP)').item.json.text }}",
+              "type": "string"
+            },
+            {
+              "id": "1dec18fd-d21c-4d59-8996-d0e2a42d1056",
+              "name": "aiText",
+              "value": "={{ $('GPT Response').item.json.choices[0].message.content }}",
+              "type": "string"
+            },
+            {
+              "id": "44c63d54-1853-4913-8f5e-a9fd1ff72cf6",
+              "name": "audio",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "8c8ea5ad-6f74-43e3-9e25-1d91b9ebb4c6",
+              "name": "audio",
+              "value": "={{ $json.audio }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1920,
+        512
+      ],
+      "id": "755cc925-0879-4941-9dfa-0d0036494b42",
+      "name": "Format Response"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "STT (Whisper HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Extract Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT Response": {
+      "main": [
+        [
+          {
+            "node": "Code (add assistant)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TTS": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "STT (Whisper HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL (SELECT)": {
+      "main": [
+        [
+          {
+            "node": "Code (build messages)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code (build messages)": {
+      "main": [
+        [
+          {
+            "node": "GPT Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code (add assistant)": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL (UPSERT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL (UPSERT)": {
+      "main": [
+        [
+          {
+            "node": "TTS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Session": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL (SELECT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "7256d639-9522-4515-a475-f503c52b5cfc",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c0e59be407a96ee7e9a61711c08d00ee197dbfa1a07ef2ffc41fd0504b80a96a"
+  },
+  "id": "8gxEpX5wq57jP1Z0",
+  "tags": []
+}

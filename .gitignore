@@ -1,0 +1,128 @@
+# =========================
+
+# Environment / Secrets
+
+# =========================
+
+.env
+.env.*
+*.env
+
+# =========================
+
+# Node.js
+
+# =========================
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# =========================
+
+# n8n
+
+# =========================
+
+.n8n/
+n8n/.n8n/
+n8n/credentials/*.json
+
+# =========================
+
+# Logs
+
+# =========================
+
+logs/
+*.log
+
+# =========================
+
+# OS Files
+
+# =========================
+
+.DS_Store
+Thumbs.db
+
+# =========================
+
+# IDE / Editor
+
+# =========================
+
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+
+# Python (frontend server)
+
+# =========================
+
+**pycache**/
+*.pyc
+
+# =========================
+
+# Build / Temp
+
+# =========================
+
+dist/
+build/
+tmp/
+temp/
+
+# =========================
+
+# Database
+
+# =========================
+
+*.sqlite
+*.db
+
+# =========================
+
+# ESP32 / Arduino
+
+# =========================
+
+*.bin
+*.elf
+*.map
+*.hex
+*.ino.cpp
+*.ino.cpp.d
+
+# =========================
+
+# Audio / Generated files
+
+# =========================
+
+frontend/assets/audio/*
+!frontend/assets/audio/.gitkeep
+
+# =========================
+
+# Screenshots / large files
+
+# =========================
+
+assets/screenshots/*
+!assets/screenshots/.gitkeep
+
+# =========================
+
+# Misc
+
+# =========================
+
+coverage/
