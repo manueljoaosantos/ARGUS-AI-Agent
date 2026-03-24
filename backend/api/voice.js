@@ -5,19 +5,31 @@ const router = express.Router();
 
 router.post("/voice", async (req, res) => {
   try {
-    const { text, audio, sessionId, device } = req.body;
+    // 🔥 garantir que nunca é undefined
+    const body = req.body || {};
 
-    if (!text && !audio) {
+    const text = body.text || null;
+    const audio = body.audio || null;
+    const sessionId = body.sessionId || "anonymous";
+    const device = body.device || "unknown";
+
+    // 🔥 detectar se vem áudio (FormData)
+    const isAudio = req.headers["content-type"]?.includes("multipart/form-data");
+
+    // ⚠️ validação inteligente
+    if (!text && !audio && !isAudio) {
       return res.status(400).json({
-        error: "Missing 'text' or 'audio'"
+        success: false,
+        error: "Missing 'text' or audio input"
       });
     }
 
     const payload = {
-      sessionId: sessionId || "anonymous",
-      device: device || "unknown",
-      text: text || null,
-      audio: audio || null,
+      sessionId,
+      device,
+      text,
+      audio,
+      isAudio, // 🔥 importante para n8n
       source: "ARGUS_API",
       timestamp: new Date().toISOString()
     };
@@ -26,9 +38,13 @@ router.post("/voice", async (req, res) => {
 
     return res.json({
       success: true,
-      reply: n8nResponse.reply || n8nResponse.aiText || "No response",
-      audio: n8nResponse.audio || null,
-      userText: n8nResponse.userText || null
+      data: {
+        reply: n8nResponse.reply || n8nResponse.aiText || "",
+        audio: n8nResponse.audio || null,
+        userText: n8nResponse.userText || text,
+        sessionId
+      },
+      error: null
     });
 
   } catch (err) {
@@ -36,6 +52,7 @@ router.post("/voice", async (req, res) => {
 
     return res.status(500).json({
       success: false,
+      data: null,
       error: err.message
     });
   }
