@@ -43,6 +43,13 @@ Webhook → STT (Whisper) → Extract Session → PostgreSQL (SELECT) → Build 
 
 ---
 
+## Voice Pipeline
+
+- v1 → legacy
+- v2 → current (recomendado)
+
+---
+
 ## 🖥️ Como executar (local)
 
 ### 1. Iniciar n8n

@@ -3,7 +3,7 @@ let audioChunks = [];
 let typingDiv = null;
 
 // CONFIG
-const API_URL = "http://192.168.1.70:5678/webhook/voice";
+const API_URL = "http://192.168.1.70:5678/webhook/voicev2";
 
 // SESSION
 let sessionId = localStorage.getItem("sessionId");
@@ -101,7 +101,8 @@ async function sendAudio() {
     removeTyping();
 
     if (payload.userText) addMessage(payload.userText, "user");
-    if (payload.aiText) addMessage(payload.aiText, "ai");
+    //if (payload.aiText) addMessage(payload.aiText, "ai");
+    if (payload.reply) addMessage(payload.reply, "ai");
 
     if (payload.audio) {
       setStatus("🔊 A falar...");
@@ -131,4 +132,21 @@ async function sendAudio() {
     removeTyping();
     setStatus("❌ Falha na comunicação");
   }
+}
+
+async function sendVoice(text) {
+  const res = await fetch("http://localhost:3000/api/voice", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      text,
+      sessionId: "manuel-web"
+    })
+  });
+
+  const data = await res.json();
+
+  console.log("ARGUS:", data.reply);
 }
