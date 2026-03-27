@@ -1,0 +1,160 @@
+{
+  "name": "ARGUS-Tool-Weather",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "weather",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -416,
+        0
+      ],
+      "id": "63de9941-1b5c-4680-8a82-b3fd0b680c78",
+      "name": "Webhook",
+      "webhookId": "5b83f48e-07b8-442d-a457-5f1e277c79b5"
+    },
+    {
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "latitude",
+              "value": "38.72"
+            },
+            {
+              "name": "longitude",
+              "value": "-9.13"
+            },
+            {
+              "name": "current_weather",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -32,
+        0
+      ],
+      "id": "ebe1f731-7647-4de9-88c3-dcc7c0c44a74",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"message\": $json.response } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        384,
+        0
+      ],
+      "id": "69e9ca79-d1ba-49d3-aba9-8a1db7684bda",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const text = $json.input?.toLowerCase() || \"\";\n\nlet city = \"lisboa\";\n\nif (text.includes(\"porto\")) city = \"porto\";\nif (text.includes(\"lisboa\")) city = \"lisboa\";\nif (text.includes(\"braga\")) city = \"braga\";\n\nreturn {\n  json: {\n    city\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        0
+      ],
+      "id": "2fc5acd5-82a6-4cfd-91c3-c4551baa95fa",
+      "name": "extrair cidade"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const weather = $json.current_weather;\n\nreturn {\n  json: {\n    response: `Estão ${weather.temperature}°C com vento de ${weather.windspeed} km/h.`\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        176,
+        0
+      ],
+      "id": "4408bd0b-c198-445a-a7f3-956c91e78f99",
+      "name": "formatar resposta"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "extrair cidade",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "formatar resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "extrair cidade": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "formatar resposta": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "ede30e45-e372-4767-a28b-d45e0abd6f0c",
+  "meta": {
+    "instanceId": "c0e59be407a96ee7e9a61711c08d00ee197dbfa1a07ef2ffc41fd0504b80a96a"
+  },
+  "id": "CgsFPLNfT9MvfjAN",
+  "tags": []
+}

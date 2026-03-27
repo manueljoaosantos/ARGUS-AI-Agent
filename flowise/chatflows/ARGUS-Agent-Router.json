@@ -1,0 +1,223 @@
+{
+  "name": "ARGUS-Agent-Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -416,
+        -160
+      ],
+      "id": "53082723-d58f-4a7c-bb50-9f67f20baad7",
+      "name": "Webhook",
+      "webhookId": "15f73c07-072e-44b2-8f62-843eda5b0fae"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const text = ($json.body?.input || \"\").toLowerCase();\n\nlet intent = \"unknown\";\n\nif (\n  text.includes(\"luz\") ||\n  text.includes(\"ligar\") ||\n  text.includes(\"desligar\")\n) {\n  intent = \"home_control\";\n}\n\nif (\n  text.includes(\"tempo\") ||\n  text.includes(\"clima\")\n) {\n  intent = \"weather\";\n}\n\nreturn {\n  json: {\n    input: text,\n    intent\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -208,
+        -160
+      ],
+      "id": "a17add89-6408-4901-bbd1-ad6e33a47a67",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "379e29c8-a692-4174-9d89-0988f3efb8f2",
+              "leftValue": "={{$json.intent}}",
+              "rightValue": "home_control",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        0,
+        -160
+      ],
+      "id": "82e09514-8976-4552-a28f-742d3a0b550c",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/weather",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"input\": \"={{ $json.input }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        -64
+      ],
+      "id": "3053a76a-aa8a-4361-adbb-3219ea9a5102",
+      "name": "weather"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/home_control",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"input\": \"={{ $json.input }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        -256
+      ],
+      "id": "f5655681-c21f-4fc7-aacd-77357ffb6492",
+      "name": "home_control"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"message\": $json.message } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        656,
+        -160
+      ],
+      "id": "413510b8-9748-4aad-8d99-e4a8f4145fe5",
+      "name": "Respond to Webhook",
+      "alwaysOutputData": false,
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {\n  json: {\n    success: true,\n    message: $json.message\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        -160
+      ],
+      "id": "a51b85dd-2bfa-4636-9fd3-0cd8a9a5e287",
+      "name": "Code Output"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "home_control",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "home_control": {
+      "main": [
+        [
+          {
+            "node": "Code Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "weather": {
+      "main": [
+        [
+          {
+            "node": "Code Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Output": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "03b169d4-74f0-4fa4-8077-5931141f7f07",
+  "meta": {
+    "instanceId": "c0e59be407a96ee7e9a61711c08d00ee197dbfa1a07ef2ffc41fd0504b80a96a"
+  },
+  "id": "IIedJTJHbo5VrJyb",
+  "tags": []
+}

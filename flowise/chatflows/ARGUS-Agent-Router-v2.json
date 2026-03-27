@@ -1,0 +1,345 @@
+{
+  "name": "ARGUS-Agent-Router-v2",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ARGUSAgentRouter",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -688,
+        -144
+      ],
+      "id": "45a83489-5449-4965-8cf9-598783b880b3",
+      "name": "Webhook",
+      "webhookId": "5c824a4e-32f2-4b32-81a3-953a7e717725"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/weather",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"input\": \"={{ $json.input }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        -80
+      ],
+      "id": "6981da87-2d79-4fa6-9140-01c0c228270f",
+      "name": "weather"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/home_control",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"input\": \"={{ $json.input }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        -256
+      ],
+      "id": "5c97ac55-de53-4478-a4cb-f2192058884e",
+      "name": "home_control"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"message\": $json.message } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        656,
+        -160
+      ],
+      "id": "cd5eb07c-5514-4175-9038-8a9e7056267e",
+      "name": "Respond to Webhook",
+      "alwaysOutputData": false,
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {\n  json: {\n    success: $json.success ?? true,\n    message: $json.message ?? \"Ação executada\"\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        -160
+      ],
+      "id": "a6c55d91-7917-4b13-8f64-7038b52cbcff",
+      "name": "Code Output"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"És um classificador de intenções.\\n\\nResponde apenas em JSON válido.\\n\\nIntents disponíveis:\\n- home_control → ações na casa\\n- weather → informação do tempo\\n\\nFormato:\\n{\\n  \\\"intent\\\": \\\"home_control | weather | unknown\\\",\\n  \\\"confidence\\\": 0-1\\n}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{$json.body.input}}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -496,
+        -144
+      ],
+      "id": "b2ace82b-b360-4a34-8f58-22fed381ff7d",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const content = $json.choices[0].message.content;\n\nlet parsed;\n\ntry {\n  parsed = JSON.parse(content);\n} catch {\n  parsed = { intent: \"unknown\", confidence: 0 };\n}\n\n// 🔥 AQUI FAZES A REGRA\nif (parsed.confidence < 0.6) {\n  parsed.intent = \"unknown\";\n}\n\nreturn {\n  json: {\n    input: $json.body.input,\n    intent: parsed.intent,\n    confidence: parsed.confidence\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        -144
+      ],
+      "id": "98b42cce-c182-4caa-af2b-4da525f1365f",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "379e29c8-a692-4174-9d89-0988f3efb8f2",
+              "leftValue": "={{$json.intent}}",
+              "rightValue": "home_control",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "453fe1ce-34e3-4a6b-afe5-83a5ff12e0d1",
+              "leftValue": "={{$json.confidence}} ",
+              "rightValue": 0.6,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {
+          "ignoreCase": false
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -192,
+        -144
+      ],
+      "id": "f7b7dfbf-0fce-4084-a109-ec71c5ad801c",
+      "name": "IF home_control"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "379e29c8-a692-4174-9d89-0988f3efb8f2",
+              "leftValue": "={{$json.intent}}",
+              "rightValue": "weather",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "453fe1ce-34e3-4a6b-afe5-83a5ff12e0d1",
+              "leftValue": "={{$json.confidence}} ",
+              "rightValue": 0.6,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {
+          "ignoreCase": false
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        32,
+        32
+      ],
+      "id": "2700c9d2-ea68-4653-b632-94cb30d7310a",
+      "name": "IF weather"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false,\n  \"message\": \"Posso ajudar com o tempo ou com controlo da casa. O que precisas?\" } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        32
+      ],
+      "id": "88e1b30d-4289-4fad-947d-faa8a3f69e6f",
+      "name": "Respond to Fallback",
+      "alwaysOutputData": false,
+      "executeOnce": false
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "home_control": {
+      "main": [
+        [
+          {
+            "node": "Code Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "weather": {
+      "main": [
+        [
+          {
+            "node": "Code Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Output": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "IF home_control",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF home_control": {
+      "main": [
+        [
+          {
+            "node": "home_control",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF weather": {
+      "main": [
+        [
+          {
+            "node": "weather",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "f8f0c57c-705d-45e6-8c51-4515a36563eb",
+  "meta": {
+    "instanceId": "c0e59be407a96ee7e9a61711c08d00ee197dbfa1a07ef2ffc41fd0504b80a96a"
+  },
+  "id": "QKjTlSIqWrSaWjqs",
+  "tags": []
+}

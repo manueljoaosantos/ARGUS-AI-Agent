@@ -1,84 +1,67 @@
-# 🤖 ARGUS AI Agent — Part 1
+# 🤖 ARGUS AI Agent
 
 ARGUS (Autonomous Responsive General Utility System) é um assistente de voz com Inteligência Artificial construído com n8n, Flowise e PostgreSQL.
 
-⚡ **Esta é a Parte 1 do projeto**, focada na criação de um pipeline completo de voz com memória e interface web.
+Sistema modular de AI Agent com:
+
+- 🧠 Flowise (Agent com tools)
+- 🔀 n8n (router + automações)
+- 🌐 ngrok (exposição externa)
+- 🗣️ Voice pipeline (STT + TTS)
+- 📡 ESP32 (objetivo final IoT)
 
 ---
 
-## 🎬 Demo
+# 🧩 Arquitetura
 
-👉 https://www.youtube.com/watch?v=rqHoJIh602I
-
----
-
-## 🚀 Funcionalidades
-
-- 🎤 Speech-to-Text (Whisper API)
-- 🧠 Conversação com LLM (GPT / Flowise)
-- 💾 Memória persistente (PostgreSQL)
-- 🔊 Text-to-Speech (voz natural)
-- ⚙️ Automação com n8n
-- 🌐 Interface web (voice.html)
-
----
-
-## 🧱 Arquitetura
-
-Frontend (voice.html)
-↓
-Webhook (n8n)
-↓
-STT → Memory → LLM → TTS
-↓
-Resposta (voz)
+ESP32 / UI  
+ ↓  
+Frontend (voice.html)  
+ ↓  
+Backend (Node.js)  
+ ↓  
+Voice Pipeline (n8n)  
+ ↓  
+ARGUS Agent Router (n8n)  
+ ↓  
+Tools (n8n)  
+ ↓  
+Resposta → Voice → Output
 
 ---
 
-## ⚙️ Workflow n8n
+# ⚙️ Setup Local (Manjaro)
 
-Pipeline completo:
+## 🔹 1. Iniciar n8n
 
-Webhook → STT (Whisper) → Extract Session → PostgreSQL (SELECT) → Build Messages → GPT → Add Assistant → PostgreSQL (UPSERT) → TTS → Response
+N8N_HOST=0.0.0.0 \
+N8N_SECURE_COOKIE=false \
+N8N_CORS_ALLOW_ORIGIN=http://192.168.1.70:8000 \
+n8n start
 
----
-
-## Voice Pipeline
-
-- v1 → legacy
-- v2 → current (recomendado)
-
----
-
-## 🖥️ Como executar (local)
-
-### 1. Iniciar n8n
-
-```bash
-N8N_HOST=0.0.0.0 N8N_SECURE_COOKIE=false n8n start
-```
+Acesso:
+http://localhost:5678
 
 ---
 
-### 2. Servir frontend
+## 🔹 2. Iniciar Flowise
 
-```bash
-cd frontend
+flowise start
+
+Acesso:
+http://localhost:3000
+
+---
+
+# 🌐 Frontend e Backend
+
+## 🔹 Frontend
+
+Na pasta `frontend`:
+
 python -m http.server 8000
-```
 
----
-
-### 3. Abrir no Chrome (permitir microfone em HTTP)
-
-```powershell
-& "C:\Program Files\Google\Chrome\Application\chrome.exe" --unsafely-treat-insecure-origin-as-secure="http://192.168.1.70:8000"
-```
-
----
-
-### 4. Aceder à interface
-
+Acesso:
 http://192.168.1.70:8000/voice.html
 
 ---
@@ -106,57 +89,137 @@ Formato do histórico:
 
 ---
 
-## 📁 Estrutura do Projeto
+---
 
-- frontend/ → interface de voz
-- n8n/ → workflows
-- flowise/ → chatflows
-- database/ → schema
-- esp32/ → integração futura
-- docs/ → documentação
+### Abrir no Chrome (permitir microfone em HTTP)
+
+```powershell
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" --unsafely-treat-insecure-origin-as-secure="http://192.168.1.70:8000"
+```
 
 ---
 
-## 🔧 Tecnologias
+## 🔹 Backend
 
-- n8n
-- Flowise
-- Langflow (futuro)
-- PostgreSQL
-- OpenAI (Whisper + GPT + TTS)
-- Manjaro Linux
+Na pasta `backend`:
+
+node server.js
 
 ---
 
-## 📡 Roadmap
+# 🌐 Exposição externa (ngrok)
 
-### 🔹 Parte 1 (este repositório)
+## 🔹 Instalar
 
-- [x] Pipeline AI Voice completo
-- [x] Memória com PostgreSQL
-- [x] Interface web (voice.html)
+yay -S ngrok
+
+## 🔹 Configurar conta
+
+1. Criar conta:
+   https://dashboard.ngrok.com/signup
+
+2. Obter authtoken:
+   https://dashboard.ngrok.com/get-started/your-authtoken
+
+3. Configurar:
+
+ngrok config add-authtoken SEU_TOKEN
+
+## 🔹 Expor n8n
+
+ngrok http 5678
+
+Vai gerar algo tipo:
+https://abc123.ngrok-free.dev
+
+## 🔹 URLs importantes
+
+https://abc123.ngrok-free.dev/webhook/ARGUSAgentRouter  
+https://abc123.ngrok-free.dev/webhook/weather  
+https://abc123.ngrok-free.dev/webhook/home_control
 
 ---
 
-### 🔹 Parte 2
+# 🧠 Workflows n8n
 
-- [ ] Integração com Flowise
-- [ ] Integração com Langflow
-- [ ] Melhor gestão de contexto
+## ARGUS-Agent-Router-v2
+
+- Classifica intenção com LLM
+- Decide:
+  - home_control
+  - weather
+  - fallback
+
+## Tools
+
+### Weather
+
+- API: Open-Meteo
+- Extrai cidade
+- Retorna temperatura + vento
+
+### Home Control
+
+- Endpoint simples (mock)
+- Preparado para IoT (ESP32)
 
 ---
 
-### 🔹 Parte 3 — Hardware (ESP32)
+# 🤖 Flowise
 
-Integração com:
+## Chatflow
 
-- INMP441 Digital Microphone / SPH0645
-- MAX98357A Amplifier
-- Cavity Speaker (8Ω 2W)
-- 1.54" IPS Display
-- TFT SPI ST7789 (2.4")
-- ESP32-S3 WROOM-1-N16R8 (com câmera OV3660)
-- ESP32-S3 AIoT Board (Wi-Fi + Bluetooth)
+- Model: gpt-4o-mini
+- Agent: Tool Agent
+- Memory: Buffer Window
+
+## Tool principal
+
+requests_post
+
+Body:
+
+{
+"input": "{{input}}"
+}
+
+## System Prompt
+
+Tens acesso a uma tool chamada "agent".
+
+Sempre que o utilizador fizer um pedido que envolva ações ou informação,
+deves usar essa tool.
+
+Nunca respondas diretamente se a tool puder tratar do pedido.
+
+Responde sempre em português de Portugal.
+
+---
+
+# 🔊 Voice Pipeline (n8n)
+
+Endpoint:
+/webhook/voicev2
+
+Função:
+
+1. Recebe áudio
+2. STT (Whisper)
+3. Chama Router
+4. Recebe resposta
+5. TTS
+6. Envia para cliente (ESP32 ou frontend)
+
+---
+
+# 🔗 Integração
+
+Voice → Router  
+POST /webhook/ARGUSAgentRouter
+
+Router → Tools  
+POST /webhook/weather  
+POST /webhook/home_control
 
 ---
 
@@ -173,11 +236,39 @@ Criar um sistema AI capaz de:
 
 ---
 
-## ⚠️ Notas
+# ⚠️ Notas
+
+Não usar:
+0.0.0.0
+
+Usar:
+localhost ou ngrok
+
+Se erro Flowise:
+
+export TOOL_REQUEST_ALLOW_LIST=\*
+flowise start
 
 - Não incluir API keys no repositório
 - Usar variáveis de ambiente (.env)
 - Configurar credenciais no n8n
+
+---
+
+# 🧪 Testes
+
+curl -X POST http://localhost:5678/webhook/ARGUSAgentRouter \
+-H "Content-Type: application/json" \
+-d '{"input":"Liga a luz da sala"}'
+
+---
+
+# 🚀 Roadmap
+
+- ESP32 integração
+- Streaming áudio
+- Routing inteligente
+- Mais tools
 
 ---
 
@@ -190,3 +281,7 @@ MIT
 ## ⭐ ARGUS
 
 **Autonomous Responsive General Utility System**
+
+# 👨‍💻 Autor
+
+Manuel João Santos
