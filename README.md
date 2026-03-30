@@ -236,6 +236,12 @@ Criar um sistema AI capaz de:
 
 ---
 
+## 📚 Documentation
+
+- [Setup Guide](./docs/setup.md)
+
+---
+
 # ⚠️ Notas
 
 Não usar:

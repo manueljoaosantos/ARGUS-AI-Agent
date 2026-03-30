@@ -1,10 +1,9 @@
 let mediaRecorder;
 let audioChunks = [];
 let typingDiv = null;
+let isRecording = false;
 
-// 🔥 podes trocar entre backend ou n8n direto
-const API_URL = "http://192.168.1.70:5678/webhook/voicev2";
-// const API_URL = "http://192.168.1.70:3000/api/voice";
+const API_URL = window.API_URL || "http://localhost:3001/api/voice";
 
 // SESSION
 let sessionId = localStorage.getItem("sessionId");
@@ -27,6 +26,7 @@ function addMessage(text, type) {
 }
 
 function showTyping() {
+  if (typingDiv) return;
   typingDiv = document.createElement("div");
   typingDiv.className = "msg ai typing";
   typingDiv.innerText = "🤖 A pensar...";
@@ -34,105 +34,114 @@ function showTyping() {
 }
 
 function removeTyping() {
-  if (typingDiv) typingDiv.remove();
+  if (typingDiv) {
+    typingDiv.remove();
+    typingDiv = null;
+  }
 }
 
 function fixSpacing(text) {
   return text
-    // espaço após pontuação
     .replace(/([.,!?])([^\s])/g, "$1 $2")
-
-    // separar palavras coladas comuns (heurística)
     .replace(/([a-zà-ÿ])([A-ZÀ-Ý])/g, "$1 $2")
-
-    // separar casos tipo "Comoestás" → "Como estás"
-    .replace(/([a-zà-ÿ])(?=[A-ZÀ-Ý])/g, "$1 ")
-
-    // limpar espaços duplicados
     .replace(/\s+/g, " ")
     .trim();
 }
 
-  // ⚡ efeito typing
-  function typeMessage(text) {
-    const div = document.createElement("div");
-    div.className = "msg ai";
-    document.getElementById("chat").appendChild(div);
+// ⚡ efeito typing
+function typeMessage(text) {
+  const div = document.createElement("div");
+  div.className = "msg ai";
+  document.getElementById("chat").appendChild(div);
 
-    let i = 0;
+  let i = 0;
 
-    function typing() {
-      if (i <= text.length) {
-        div.textContent = text.slice(0, i); // 🔥 diferença CRÍTICA
-        i++;
-        setTimeout(typing, 10);
-      }
+  function typing() {
+    if (i <= text.length) {
+      div.textContent = text.slice(0, i);
+      i++;
+      setTimeout(typing, 10);
     }
-
-    typing();
   }
+
+  typing();
+}
+
 function resetSession() {
   localStorage.removeItem("sessionId");
   location.reload();
 }
+
 // 🎤 GRAVAÇÃO COM VAD
 document.getElementById("recordBtn").onclick = async function () {
+  if (isRecording) return;
+  isRecording = true;
+
   const btn = this;
 
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  mediaRecorder = new MediaRecorder(stream);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
 
-  audioChunks = [];
+    audioChunks = [];
 
-  let silenceTimer;
-  let isRecording = true;
+    let silenceTimer;
 
-  const audioContext = new AudioContext();
-  const source = audioContext.createMediaStreamSource(stream);
-  const analyser = audioContext.createAnalyser();
+    const audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
 
-  source.connect(analyser);
-  analyser.fftSize = 512;
+    source.connect(analyser);
+    analyser.fftSize = 512;
 
-  const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-  function detectSilence() {
-    analyser.getByteFrequencyData(dataArray);
-    const volume = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+    function detectSilence() {
+      analyser.getByteFrequencyData(dataArray);
+      const volume = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
 
-    if (volume < 10) {
-      if (!silenceTimer) {
-        silenceTimer = setTimeout(stopRecording, 1200);
+      if (volume < 10) {
+        if (!silenceTimer) {
+          silenceTimer = setTimeout(stopRecording, 1200);
+        }
+      } else {
+        clearTimeout(silenceTimer);
+        silenceTimer = null;
       }
-    } else {
-      clearTimeout(silenceTimer);
-      silenceTimer = null;
+
+      if (isRecording) requestAnimationFrame(detectSilence);
     }
 
-    if (isRecording) requestAnimationFrame(detectSilence);
-  }
+    function stopRecording() {
+      if (!isRecording) return;
 
-  function stopRecording() {
-    if (!isRecording) return;
+      isRecording = false;
+      mediaRecorder.stop();
 
+      stream.getTracks().forEach(track => track.stop());
+
+      btn.classList.remove("recording");
+      setStatus("⏳ A processar...");
+    }
+
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = sendAudio;
+
+    mediaRecorder.start();
+    btn.classList.add("recording");
+
+    setStatus("🎤 Fala à vontade...");
+    addMessage("🎤 ...", "user");
+
+    detectSilence();
+
+    setTimeout(stopRecording, 6000);
+
+  } catch (err) {
+    console.error(err);
+    setStatus("❌ Erro no microfone");
     isRecording = false;
-    mediaRecorder.stop();
-    btn.classList.remove("recording");
-    setStatus("⏳ A processar...");
   }
-
-  mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-  mediaRecorder.onstop = sendAudio;
-
-  mediaRecorder.start();
-  btn.classList.add("recording");
-
-  setStatus("🎤 Fala à vontade...");
-  addMessage("🎤 ...", "user");
-
-  detectSilence();
-
-  setTimeout(stopRecording, 6000); // fallback
 };
 
 // 🚀 ENVIO
@@ -151,52 +160,85 @@ async function sendAudio() {
       body: formData
     });
 
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
     const res = await response.json();
-
-    console.log("RAW RESPONSE:", res);
-
-    // 🔥 compatível com backend e n8n direto
     const payload = res?.data || res;
 
-    if (!payload) {
-      setStatus("❌ Resposta inválida");
-      removeTyping();
-      return;
-    }
+    console.log("PAYLOAD:", payload);
 
     removeTyping();
 
-    // 👤 texto do utilizador (STT)
+    if (!payload) {
+      setStatus("❌ Resposta inválida");
+      return;
+    }
+
+    // 👤 texto STT (substituir "🎤 ...")
     if (payload.userText) {
-      addMessage(payload.userText, "user");
+      const lastMsg = document.querySelector(".msg.user:last-child");
+
+      if (lastMsg && lastMsg.innerText === "🎤 ...") {
+        lastMsg.innerText = payload.userText;
+      } else {
+        addMessage(payload.userText, "user");
+      }
     }
 
-    // 🤖 resposta AI
-    if (payload.reply) {
-      const fixed = fixSpacing(payload.reply);
-      typeMessage(fixed);
+    // 🤖 resposta
+    const reply = payload.reply || payload.text;
+
+    if (reply) {
+      typeMessage(fixSpacing(reply));
     }
 
-    // 🔊 áudio
+    // 🔊 áudio COM CONTROLOS (FINAL)
     if (payload.audio) {
-      const byteCharacters = atob(payload.audio);
-      const byteArray = new Uint8Array(
-        [...byteCharacters].map(c => c.charCodeAt(0))
-      );
+      const mime = payload.mimeType || "audio/mpeg";
 
-      const audioBlob = new Blob([byteArray], { type: "audio/mpeg" });
+      const byteCharacters = atob(payload.audio);
+      const byteNumbers = new Array(byteCharacters.length);
+
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+
+      const byteArray = new Uint8Array(byteNumbers);
+      const audioBlob = new Blob([byteArray], { type: mime });
+
       const audioUrl = URL.createObjectURL(audioBlob);
 
       const player = document.getElementById("player");
 
+      // 🔥 parar áudio anterior
+      player.pause();
+      player.currentTime = 0;
+
+      // 🔥 cleanup URL anterior
+      if (window.currentAudioUrl) {
+        URL.revokeObjectURL(window.currentAudioUrl);
+      }
+
+      window.currentAudioUrl = audioUrl;
+
       player.src = audioUrl;
       player.style.display = "block";
+      player.controls = true;
 
-      setTimeout(() => {
-        player.play();
-      }, 50);
+      player.scrollIntoView({ behavior: "smooth" });
 
-      player.onended = () => setStatus("✅ Pronto");
+      player.play().catch(err =>
+        console.warn("Audio play error:", err)
+      );
+
+      player.onended = () => {
+        setStatus("✅ Pronto");
+      };
+
+    } else {
+      setStatus("✅ Pronto");
     }
 
   } catch (err) {
@@ -222,14 +264,15 @@ async function sendVoice(text) {
       })
     });
 
-    const data = await res.json();
+    if (!res.ok) throw new Error("HTTP error");
 
+    const data = await res.json();
     const payload = data?.data || data;
 
     removeTyping();
 
     if (payload?.reply) {
-      typeMessage(payload.reply);
+      typeMessage(fixSpacing(payload.reply));
     }
 
   } catch (err) {

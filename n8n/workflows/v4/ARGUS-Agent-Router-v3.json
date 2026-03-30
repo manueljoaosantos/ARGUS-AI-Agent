@@ -1,0 +1,257 @@
+{
+  "name": "ARGUS-Agent-Router-v3",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -688,
+        -144
+      ],
+      "id": "3b156d4a-c261-4087-968d-93762b9a02f4",
+      "name": "Webhook",
+      "webhookId": "6dce2349-267f-4264-8c23-84511cfe4e1a"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/weather",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"input\": \"{{ $json.input }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        -80
+      ],
+      "id": "3e91fdef-af4c-4b3f-b815-860922494a11",
+      "name": "weather"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/home_control",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"input\": \"={{ $json.input }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        -256
+      ],
+      "id": "6a6960f4-c9a6-4880-b420-6ce825193070",
+      "name": "home_control"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        656,
+        -160
+      ],
+      "id": "794e3da9-e048-4e65-a896-db27be5f31dd",
+      "name": "Respond to Webhook",
+      "alwaysOutputData": false,
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {\n  json: {\n    text: $json.text ?? $json.reply ?? \"Ação executada\"\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        -160
+      ],
+      "id": "57977878-1b40-4219-baa4-1644fa8bf73c",
+      "name": "Code Output"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const text = ($json.body?.input || \"\").toLowerCase();\n\nlet intent = \"unknown\";\n\nif (\n  text.includes(\"luz\") ||\n  text.includes(\"ligar\") ||\n  text.includes(\"desligar\")\n) {\n  intent = \"home_control\";\n}\n\nif (\n  text.includes(\"tempo\") ||\n  text.includes(\"clima\")\n) {\n  intent = \"weather\";\n}\n\nreturn {\n  json: {\n    input: text,\n    intent\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        -144
+      ],
+      "id": "64141539-af25-45c4-91e0-11f02b12f878",
+      "name": "detetar intenção"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.intent}}",
+                    "rightValue": "home_control",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "5bf7969c-9496-4a0c-adcc-9838e61b5b50"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "home_control"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "1eb602d0-6dd3-4cdd-8fd3-42fa4288b904",
+                    "leftValue": "={{$json.intent}}",
+                    "rightValue": "weather",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "weather"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -192,
+        -160
+      ],
+      "id": "b46ee2f4-638e-48ba-a780-c8035ce75a50",
+      "name": "Switch"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "detetar intenção",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "home_control": {
+      "main": [
+        [
+          {
+            "node": "Code Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "weather": {
+      "main": [
+        [
+          {
+            "node": "Code Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Output": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "detetar intenção": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "home_control",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "790dbfbc-4d23-41d9-afee-c4ec731e25cd",
+  "meta": {
+    "instanceId": "c0e59be407a96ee7e9a61711c08d00ee197dbfa1a07ef2ffc41fd0504b80a96a"
+  },
+  "id": "Un0qF9ZY7sPbX2OC",
+  "tags": []
+}
