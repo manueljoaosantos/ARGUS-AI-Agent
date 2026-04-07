@@ -1,8 +1,8 @@
 import fetch from "node-fetch";
 import { config } from "../config/env.js";
 
-export async function textToSpeech(text) {
-  const res = await fetch(`${config.OPENAI_BASE_URL}/audio/speech`, {
+export async function textToSpeech(text, res) {
+  const ttsRes = await fetch(`${config.OPENAI_BASE_URL}/audio/speech`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -11,23 +11,26 @@ export async function textToSpeech(text) {
     body: JSON.stringify({
       model: config.TTS_MODEL,
       voice: config.TTS_VOICE,
-      input: text
+      input: text,
+      format: "mp3" // 🔥 perfeito para Audio.h
     })
   });
 
-  const contentType = res.headers.get("content-type");
-
-  // 🔥 se não for áudio → erro
-  if (!contentType || !contentType.startsWith("audio/")) {
-    const errorText = await res.text();
-    console.error("❌ TTS ERROR:", errorText);
-    throw new Error("TTS não devolveu áudio válido");
+  if (!ttsRes.ok) {
+    const err = await ttsRes.text();
+    console.error("❌ TTS ERROR:", err);
+    throw new Error("Erro no TTS");
   }
 
-  const buffer = await res.arrayBuffer();
+  // 🔥 carregar tudo para buffer (IMPORTANTE)
+  const buffer = Buffer.from(await ttsRes.arrayBuffer());
 
-  return {
-    audio: Buffer.from(buffer).toString("base64"),
-    mimeType: contentType
-  };
+  console.log("🔊 MP3 size:", buffer.length);
+
+  // 🔥 headers corretos (SEM chunked)
+  res.setHeader("Content-Type", "audio/mpeg");
+  res.setHeader("Content-Length", buffer.length);
+
+  // 🔥 enviar completo
+  res.send(buffer);
 }
