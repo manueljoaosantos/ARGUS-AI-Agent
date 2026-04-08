@@ -4,6 +4,11 @@ import { config } from "../config/env.js";
 
 export async function speechToText(buffer) {
   try {
+    // 🔒 validações
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY não definida");
+    }
+
     if (!buffer || buffer.length === 0) {
       throw new Error("Buffer de áudio vazio");
     }
@@ -20,44 +25,59 @@ export async function speechToText(buffer) {
     formData.append("model", config.STT_MODEL || "whisper-1");
     formData.append("language", config.STT_LANGUAGE || "pt");
 
-    // 🔥 ajuda o modelo a interpretar melhor PT-PT
+    // 🇵🇹 ajuda PT-PT
     formData.append(
       "prompt",
-      "Fala em português de Portugal corretamente."
+      "Transcreve em português de Portugal corretamente."
     );
 
-    const res = await fetch(
-      `${config.OPENAI_BASE_URL}/audio/transcriptions`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          ...formData.getHeaders() // 🔥 CRÍTICO
-        },
-        body: formData
-      }
-    );
+    const url = `${config.OPENAI_BASE_URL}/audio/transcriptions`;
 
-    const data = await res.json();
+    console.log("🌐 STT URL:", url);
 
-    console.log("🧠 STT RAW:", data);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        ...formData.getHeaders() // 🔥 obrigatório
+      },
+      body: formData
+    });
 
-    // ❌ erro da API
+    const raw = await res.text();
+
+    console.log("📦 STT RAW:", raw);
+
+    // ❌ erro HTTP
     if (!res.ok) {
-      console.error("❌ STT ERROR:", data);
-      throw new Error(data?.error?.message || "Erro no STT");
+      throw new Error(`STT error ${res.status}: ${raw}`);
     }
 
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (err) {
+      throw new Error("Erro a fazer parse da resposta STT");
+    }
+
+    console.log("🧠 STT JSON:", data);
+
     // ❌ resposta inválida
-    if (!data.text) {
-      console.warn("⚠️ STT sem texto");
+    if (!data?.text || data.text.trim() === "") {
+      console.warn("⚠️ STT sem texto válido");
       return null;
     }
 
-    return data.text;
+    // 🔥 normalização leve (evita bugs downstream)
+    return data.text
+      .normalize("NFC")
+      .replace(/\s+/g, " ")
+      .trim();
 
   } catch (err) {
     console.error("❌ STT FAIL:", err.message);
-    return null; // 🔥 importante para não crashar backend
+
+    // 🔥 nunca crasha backend
+    return null;
   }
 }

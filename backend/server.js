@@ -1,93 +1,152 @@
 import express from "express";
 import cors from "cors";
-import { textToSpeech } from "./services/tts.js"; // 🔥 ESTA LINHA
-import voiceRoute from "./api/voice.js";
-import { config } from "./config/env.js";
 import "dotenv/config";
-import fs from "fs";
-import path from "path";
+
+import { config } from "./config/env.js";
+import { textToSpeech } from "./services/tts.js";
+import { sendToFlowise } from "./services/flowiseClient.js";
 
 const app = express();
 
-// 🔥 isto já trata preflight automaticamente
-app.use(cors({
-    origin: "*"
+// ==========================
+// 🔥 DEBUG ENV (REMOVER EM PROD)
+// ==========================
+console.log("FLOWISE_URL:", process.env.FLOWISE_URL);
+console.log("FLOWISE_CHATFLOW_ID:", process.env.FLOWISE_CHATFLOW_ID);
 
-}));
-
+// ==========================
+// 🔥 MIDDLEWARE
+// ==========================
+app.use(cors({ origin: config.FRONTEND_URL || "*" }));
 app.use(express.json({ limit: "15mb" }));
 
-app.use("/api", voiceRoute);
+app.use((req, res, next) => {
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  next();
+});
 
+// ==========================
+// 🔍 ROOT
+// ==========================
 app.get("/", (req, res) => {
   res.send("ARGUS API running");
 });
 
-let requestCount = 0;
+// ==========================
+// 🔧 NORMALIZE PARA ESP32
+// ==========================
+function normalizeForESP32(text) {
+  return text
+    .normalize("NFD") // separa acentos
+    .replace(/[\u0300-\u036f]/g, "") // remove acentos
+    .replace(/ç/g, "c")
+    .replace(/Ç/g, "C")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-app.get("/api/debug-audio", (req, res) => {
-  console.log("🔥 DEBUG AUDIO HIT");
+// ==========================
+// 🧠 RESOLVE REPLY
+// ==========================
+function resolveReply(res) {
+  if (!res) return null;
 
-  const filePath = path.resolve("./debug_audio.mp3");
+  let reply =
+    res.reply ||
+    res.text ||
+    res.response ||
+    res.output ||
+    res.outputs?.[0]?.output ||
+    "";
 
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ error: "Ficheiro não encontrado" });
+  // 🔥 PRIORIDADE: TOOL (melhor UX)
+  if (res.usedTools?.length > 0) {
+    try {
+      const tool = JSON.parse(res.usedTools[0].toolOutput);
+      if (tool.text) {
+        reply = tool.text;
+      }
+    } catch {
+      console.warn("⚠️ erro a parse toolOutput");
+    }
   }
 
-  const stat = fs.statSync(filePath);
+  if (!reply || reply.trim() === "") {
+    reply = "Desculpa, não consegui responder.";
+  }
 
-  res.writeHead(200, {
-    "Content-Type": "audio/mpeg",
-    "Content-Length": stat.size,
-    "Connection": "close",
-    "Cache-Control": "no-cache"
-  });
+  return reply
+    .normalize("NFC")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-  const stream = fs.createReadStream(filePath, { highWaterMark: 1024 });
+// ==========================
+// 🎤 VOICE ENDPOINT
+// ==========================
+app.get("/api/voice", async (req, res) => {
+  try {
+    const text = req.query.text;
+    const sessionId = req.query.sessionId || "esp32";
+    const ttsOnly = req.query.tts === "1";
 
-  let isFirstChunk = true;
-
-  stream.on("data", (chunk) => {
-    if (isFirstChunk) {
-      // 🔥 PRIMEIRO CHUNK IMEDIATO (CRÍTICO)
-      res.write(chunk);
-      isFirstChunk = false;
-      return;
+        // 🔥 FIX ENCODING
+    try {
+      text = decodeURIComponent(text);
+    } catch {
+      console.warn("⚠️ decodeURIComponent falhou");
+    }
+    
+    if (!text) {
+      return res.status(400).json({ error: "Missing text" });
     }
 
-    // 🔥 resto com throttle
-    stream.pause();
+    console.log("📥 INPUT:", text);
 
-    res.write(chunk, () => {
-      setTimeout(() => {
-        stream.resume();
-      }, 10);
+    // 🔊 TTS ONLY
+    if (ttsOnly) {
+      return await textToSpeech(text, res);
+    }
+
+    // 🧠 FLOWISE
+    const flowiseResponse = await sendToFlowise({
+      question: text,
+      sessionId
     });
-  });
 
-  stream.on("end", () => {
-    console.log("✅ Stream finished");
-    res.end();
-  });
+    const rawReply = resolveReply(flowiseResponse);
 
-  stream.on("error", (err) => {
-    console.error("❌ Stream error:", err);
-    res.end();
-  });
-});
+    // 🔥 TEXTO ORIGINAL (para áudio)
+    const replyForAudio = rawReply;
 
-app.get("/api/voice", async (req, res) => {
-  const text = req.query.text;
+    // 🔥 TEXTO LIMPO (para ESP32 display)
+    const safeReply = normalizeForESP32(rawReply);
+    const safeText = normalizeForESP32(text);
 
-  if (!text) {
-    return res.status(400).json({ error: "Missing text" });
+    console.log("🧠 FINAL:", safeReply);
+
+    // 🔥 HEADERS (ESP32 lê isto)
+    const b64 = (str) => Buffer.from(str, "utf-8").toString("base64");
+
+    res.setHeader("Connection", "close");
+    res.setHeader("X-User-Text", b64(safeText));
+    res.setHeader("X-AI-Reply", b64(safeReply));
+
+    // 🔊 ÁUDIO COM ACENTOS (IMPORTANTE)
+    return await textToSpeech(replyForAudio, res);
+
+  } catch (err) {
+    console.error("❌ ERROR:", err.message);
+
+    return res.status(500).json({
+      error: "Erro interno"
+    });
   }
-
-  console.log("🗣️ TTS:", text);
-
-  await textToSpeech(text, res);
 });
 
+// ==========================
+// 🚀 START
+// ==========================
 app.listen(config.PORT, () => {
   console.log(`🚀 ARGUS running on port ${config.PORT}`);
 });
