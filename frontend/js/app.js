@@ -3,7 +3,8 @@ let audioChunks = [];
 let typingDiv = null;
 let isRecording = false;
 
-const API_URL = window.API_URL || "http://localhost:3001/api/voice";
+// 🔥 URL do n8n
+const API_URL = "http://192.168.1.70:5678/webhook/voicev3";
 
 // SESSION
 let sessionId = localStorage.getItem("sessionId");
@@ -144,7 +145,7 @@ document.getElementById("recordBtn").onclick = async function () {
   }
 };
 
-// 🚀 ENVIO
+// 🚀 ENVIO (STREAMING + HEADERS)
 async function sendAudio() {
   showTyping();
 
@@ -164,82 +165,63 @@ async function sendAudio() {
       throw new Error(`HTTP ${response.status}`);
     }
 
-    const res = await response.json();
-    const payload = res?.data || res;
+    // 🔥 HEADERS (AGORA TEXTO DIRETO — SEM atob)
+    const userText = response.headers.get("X-User-Text");
+    const reply = response.headers.get("X-AI-Reply");
 
-    console.log("PAYLOAD:", payload);
+    // 🔊 AUDIO
+    const audioBlob = await response.blob();
+    const audioUrl = URL.createObjectURL(audioBlob);
+console.log("USER:", userText);
+console.log("AI:", reply);
+
+for (let [key, value] of response.headers.entries()) {
+  console.log(key, value);
+}
 
     removeTyping();
 
-    if (!payload) {
-      setStatus("❌ Resposta inválida");
-      return;
-    }
-
-    // 👤 texto STT (substituir "🎤 ...")
-    if (payload.userText) {
+    // 👤 USER TEXT
+    if (userText) {
       const lastMsg = document.querySelector(".msg.user:last-child");
 
       if (lastMsg && lastMsg.innerText === "🎤 ...") {
-        lastMsg.innerText = payload.userText;
+        lastMsg.innerText = userText;
       } else {
-        addMessage(payload.userText, "user");
+        addMessage(userText, "user");
       }
     }
 
-    // 🤖 resposta
-    const reply = payload.reply || payload.text;
-
+    // 🤖 AI REPLY
     if (reply) {
       typeMessage(fixSpacing(reply));
     }
 
-    // 🔊 áudio COM CONTROLOS (FINAL)
-    if (payload.audio) {
-      const mime = payload.mimeType || "audio/mpeg";
+    // 🔊 PLAYER
+    const player = document.getElementById("player");
 
-      const byteCharacters = atob(payload.audio);
-      const byteNumbers = new Array(byteCharacters.length);
+    player.pause();
+    player.currentTime = 0;
 
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-
-      const byteArray = new Uint8Array(byteNumbers);
-      const audioBlob = new Blob([byteArray], { type: mime });
-
-      const audioUrl = URL.createObjectURL(audioBlob);
-
-      const player = document.getElementById("player");
-
-      // 🔥 parar áudio anterior
-      player.pause();
-      player.currentTime = 0;
-
-      // 🔥 cleanup URL anterior
-      if (window.currentAudioUrl) {
-        URL.revokeObjectURL(window.currentAudioUrl);
-      }
-
-      window.currentAudioUrl = audioUrl;
-
-      player.src = audioUrl;
-      player.style.display = "block";
-      player.controls = true;
-
-      player.scrollIntoView({ behavior: "smooth" });
-
-      player.play().catch(err =>
-        console.warn("Audio play error:", err)
-      );
-
-      player.onended = () => {
-        setStatus("✅ Pronto");
-      };
-
-    } else {
-      setStatus("✅ Pronto");
+    if (window.currentAudioUrl) {
+      URL.revokeObjectURL(window.currentAudioUrl);
     }
+
+    window.currentAudioUrl = audioUrl;
+
+    player.src = audioUrl;
+    player.style.display = "block";
+    player.controls = true;
+
+    player.scrollIntoView({ behavior: "smooth" });
+
+    player.play().catch(err =>
+      console.warn("Audio play error:", err)
+    );
+
+    player.onended = () => {
+      setStatus("✅ Pronto");
+    };
 
   } catch (err) {
     console.error(err);
@@ -266,13 +248,12 @@ async function sendVoice(text) {
 
     if (!res.ok) throw new Error("HTTP error");
 
-    const data = await res.json();
-    const payload = data?.data || data;
+    const reply = res.headers.get("X-AI-Reply");
 
     removeTyping();
 
-    if (payload?.reply) {
-      typeMessage(fixSpacing(payload.reply));
+    if (reply) {
+      typeMessage(fixSpacing(reply));
     }
 
   } catch (err) {

@@ -1,8 +1,8 @@
-
 import express from "express";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 import { sendToFlowise } from "../services/flowiseClient.js";
 import { speechToText } from "../services/stt.js";
@@ -23,24 +23,29 @@ function b64(str) {
   return Buffer.from(str, "utf-8").toString("base64");
 }
 
-// 🔥 RESOLVER RESPOSTA (FIX PRINCIPAL)
-function resolveReply(flowiseResponse) {
-  let reply = flowiseResponse?.text;
+// ==========================
+// 🧠 RESOLVE REPLY (UNIFICADO)
+// ==========================
+function resolveReply(res) {
+  if (!res) return null;
 
-  // fallback para tool
-  if (!reply || reply.trim() === "") {
+  let reply =
+    res.text ||
+    res.response ||
+    res.output ||
+    "";
+
+  // 🔧 fallback tools
+  if (!reply && res.usedTools?.length > 0) {
     try {
-      const tool = flowiseResponse?.usedTools?.[0];
-      if (tool?.toolOutput) {
-        const parsed = JSON.parse(tool.toolOutput);
-        reply = parsed.text || parsed.reply;
-      }
+      const tool = JSON.parse(res.usedTools[0].toolOutput);
+      reply = tool.text || tool.reply || "";
     } catch (e) {
-      console.error("Tool parse error:", e);
+      console.warn("⚠️ Tool parse error");
     }
   }
 
-  if (!reply || reply.trim() === "") {
+  if (!reply) {
     reply = "Não consegui obter resposta.";
   }
 
@@ -68,16 +73,13 @@ router.get("/voice", async (req, res) => {
       res.setHeader("X-User-Text", b64(text));
       res.setHeader("X-AI-Reply", b64(text));
 
-      await textToSpeech(text, res);
-      return;
+      return await textToSpeech(text, res);
     }
 
-    const payload = {
+    const flowiseResponse = await sendToFlowise({
       question: text,
       sessionId
-    };
-
-    const flowiseResponse = await sendToFlowise(payload);
+    });
 
     const reply = resolveReply(flowiseResponse);
 
@@ -88,11 +90,11 @@ router.get("/voice", async (req, res) => {
     res.setHeader("X-User-Text", b64(text));
     res.setHeader("X-AI-Reply", b64(reply));
 
-    await textToSpeech(reply, res);
+    return await textToSpeech(reply, res);
 
   } catch (err) {
-    console.error("❌ GET ERROR:", err);
-    res.status(500).json({ error: err.message });
+    console.error("❌ GET ERROR:", err.message);
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -102,7 +104,7 @@ router.post("/voice", upload.single("file"), async (req, res) => {
     const body = req.body || {};
 
     let text = body.text || null;
-    const sessionId = body.sessionId || "anonymous";
+    const sessionId = body.sessionId || crypto.randomUUID();
     const device = body.device || "unknown";
 
     const isAudio = !!req.file;
@@ -111,6 +113,7 @@ router.post("/voice", upload.single("file"), async (req, res) => {
 
     const timestamp = Date.now();
 
+    // 💾 guardar input áudio
     if (isAudio && req.file) {
       const inputPath = path.join(
         AUDIO_DIR,
@@ -137,6 +140,7 @@ router.post("/voice", upload.single("file"), async (req, res) => {
       console.log("📝 Texto reconhecido:", text);
     }
 
+    // ❌ validação final
     if (!text || text.trim() === "") {
       return res.status(400).json({
         success: false,
@@ -144,19 +148,18 @@ router.post("/voice", upload.single("file"), async (req, res) => {
       });
     }
 
-    const payload = {
+    console.log("📡 PAYLOAD FLOWISE:", { text, sessionId });
+
+    const flowiseResponse = await sendToFlowise({
       question: text,
-      sessionId: sessionId || crypto.randomUUID()
-    };
-
-    console.log("📡 PAYLOAD FLOWISE:", payload);
-
-    const flowiseResponse = await sendToFlowise(payload);
+      sessionId
+    });
 
     const reply = resolveReply(flowiseResponse);
 
     console.log("🤖 Flowise:", reply);
 
+    // 💾 guardar texto resposta
     const textLogPath = path.join(
       AUDIO_DIR,
       `${timestamp}_${device}_reply.txt`
@@ -168,7 +171,8 @@ router.post("/voice", upload.single("file"), async (req, res) => {
     res.setHeader("X-User-Text", b64(text));
     res.setHeader("X-AI-Reply", b64(reply));
 
-    if (reply && reply !== "Não consegui responder.") {
+    // 🔊 gerar áudio
+    if (reply && reply !== "Não consegui obter resposta.") {
       console.log("🔊 A gerar áudio...");
 
       const originalSend = res.send.bind(res);
@@ -190,12 +194,15 @@ router.post("/voice", upload.single("file"), async (req, res) => {
         return originalSend(buffer);
       };
 
-      await textToSpeech(reply, res);
-      return;
+      return await textToSpeech(reply, res);
     }
 
+    // fallback (não devia acontecer)
+    return res.json({ text: reply });
+
   } catch (err) {
-    console.error("❌ VOICE ERROR:", err);
+    console.error("❌ VOICE ERROR:", err.message);
+
     return res.status(500).json({
       success: false,
       error: err.message
@@ -203,7 +210,9 @@ router.post("/voice", upload.single("file"), async (req, res) => {
   }
 });
 
-// 🔥 NORMALIZE CLEAN (sem hacks perigosos)
+// ==========================
+// 🔥 NORMALIZE CLEAN
+// ==========================
 function normalizeText(text) {
   return text
     .normalize("NFC")
@@ -212,4 +221,3 @@ function normalizeText(text) {
 }
 
 export default router;
-

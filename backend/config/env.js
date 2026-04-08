@@ -2,9 +2,8 @@ export const config = {
   PORT: process.env.PORT || 3001,
 
   // 🔥 Flowise
-  FLOWISE_URL: process.env.FLOWISE_URL || "http://localhost:3000",
-  FLOWISE_CHATFLOW_ID:
-    process.env.FLOWISE_CHATFLOW_ID || "2a08b24c-ed31-4474-9638-f98121a0f97e",
+  FLOWISE_URL: process.env.FLOWISE_URL,
+  FLOWISE_CHATFLOW_ID: process.env.FLOWISE_CHATFLOW_ID,
 
   // 🔧 n8n
   N8N_WEBHOOK:
