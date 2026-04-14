@@ -117,7 +117,7 @@ router.post("/voice", upload.single("file"), async (req, res) => {
     if (isAudio && req.file) {
       const inputPath = path.join(
         AUDIO_DIR,
-        `${timestamp}_${device}_input.webm`
+        `${timestamp}_${device}_input.wav`
       );
 
       fs.writeFileSync(inputPath, req.file.buffer);
@@ -181,7 +181,7 @@ router.post("/voice", upload.single("file"), async (req, res) => {
         try {
           const outputPath = path.join(
             AUDIO_DIR,
-            `${timestamp}_${device}_output.mp3`
+            `${timestamp}_${device}_output.wav`
           );
 
           fs.writeFileSync(outputPath, buffer);

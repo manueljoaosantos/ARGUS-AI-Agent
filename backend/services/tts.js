@@ -1,16 +1,27 @@
 import fetch from "node-fetch";
+import ffmpeg from "fluent-ffmpeg";
+import ffmpegPath from "ffmpeg-static";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { config } from "../config/env.js";
 
+ffmpeg.setFfmpegPath(ffmpegPath);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const DEBUG_DIR = path.join(__dirname, "../debug");
+
+if (!fs.existsSync(DEBUG_DIR)) {
+  fs.mkdirSync(DEBUG_DIR);
+}
+
+// ==========================
+// 🔊 TTS
+// ==========================
 export async function textToSpeech(text, res) {
   try {
-    // 🔒 validações
-    if (!process.env.OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY não definida");
-    }
-
-    if (!text || text.trim() === "") {
-      throw new Error("Texto vazio para TTS");
-    }
 
     const url = `${config.OPENAI_BASE_URL}/audio/speech`;
 
@@ -29,41 +40,63 @@ export async function textToSpeech(text, res) {
       body: JSON.stringify({
         model: config.TTS_MODEL,
         voice: config.TTS_VOICE,
-        input: text,
-        format: "mp3"
+        input: text
       })
     });
 
     const raw = await ttsRes.arrayBuffer();
 
-    // ❌ erro da API
     if (!ttsRes.ok) {
       const errText = Buffer.from(raw).toString("utf-8");
       console.error("❌ TTS ERROR:", errText);
-      throw new Error(`TTS falhou (${ttsRes.status})`);
+      throw new Error("TTS falhou");
     }
 
-    // 🔥 buffer completo (IMPORTANTE para ESP32)
-    const buffer = Buffer.from(raw);
+    const mp3Buffer = Buffer.from(raw);
 
-    if (!buffer || buffer.length === 0) {
-      throw new Error("TTS devolveu buffer vazio");
-    }
+    // ==========================
+    // 💾 SAVE MP3 RAW (debug)
+    // ==========================
+    const timestamp = Date.now();
+    const mp3Path = path.join(DEBUG_DIR, `output_${timestamp}.mp3`);
+    fs.writeFileSync(mp3Path, mp3Buffer);
 
-    console.log("🔊 MP3 size:", buffer.length);
+    console.log("💾 MP3 guardado:", mp3Path);
 
-    // 🔥 headers corretos (evita chunked)
-    res.setHeader("Content-Type", "audio/mpeg");
-    res.setHeader("Content-Length", buffer.length);
+    // ==========================
+    // 🔥 CONVERTER PARA WAV REAL
+    // ==========================
+    const wavPath = path.join(DEBUG_DIR, `output_${timestamp}.wav`);
+
+    await new Promise((resolve, reject) => {
+      ffmpeg(mp3Path)
+        .audioFrequency(16000)   // 🔥 alinhado com ESP32
+        .audioChannels(1)
+        .audioCodec("pcm_s16le")
+        .format("wav")
+        .on("end", resolve)
+        .on("error", reject)
+        .save(wavPath);
+    });
+
+    const wavBuffer = fs.readFileSync(wavPath);
+
+    console.log("🔊 WAV size:", wavBuffer.length);
+    console.log("💾 WAV guardado:", wavPath);
+
+    // ==========================
+    // 🔥 RESPONSE
+    // ==========================
+    res.setHeader("Content-Type", "audio/wav");
+    res.setHeader("Content-Length", wavBuffer.length);
     res.setHeader("Connection", "close");
+    res.setHeader("Cache-Control", "no-cache");
 
-    // 🔥 enviar completo
-    return res.send(buffer);
+    return res.send(wavBuffer);
 
   } catch (err) {
     console.error("❌ TTS FAIL:", err.message);
 
-    // fallback seguro
     if (!res.headersSent) {
       return res.status(500).json({
         error: "Erro ao gerar áudio"
