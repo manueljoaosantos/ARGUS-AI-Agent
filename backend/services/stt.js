@@ -18,8 +18,8 @@ export async function speechToText(buffer) {
     const formData = new FormData();
 
     formData.append("file", buffer, {
-      filename: "audio.webm",
-      contentType: "audio/webm"
+      filename: "audio.wav",
+      contentType: "audio/wav"
     });
 
     formData.append("model", config.STT_MODEL || "whisper-1");
@@ -44,7 +44,8 @@ export async function speechToText(buffer) {
       body: formData
     });
 
-    const raw = await res.text();
+    const responseBuffer = await res.arrayBuffer();
+    const raw = new TextDecoder("utf-8").decode(responseBuffer);
 
     console.log("📦 STT RAW:", raw);
 

@@ -1,19 +1,13 @@
 # =========================
-
 # Environment / Secrets
-
 # =========================
-
 .env
 .env.*
 *.env
 
 # =========================
-
 # Node.js
-
 # =========================
-
 node_modules/
 npm-debug.log*
 yarn-debug.log*
@@ -21,79 +15,56 @@ yarn-error.log*
 package-lock.json
 
 # =========================
-
 # n8n
-
 # =========================
-
 .n8n/
 n8n/.n8n/
 n8n/credentials/*.json
 
 # =========================
-
 # Logs
-
 # =========================
-
 logs/
 *.log
 
 # =========================
-
 # OS Files
-
 # =========================
-
 .DS_Store
 Thumbs.db
 
 # =========================
-
 # IDE / Editor
-
 # =========================
-
 .vscode/
 .idea/
 *.swp
 *.swo
 
 # =========================
-
-# Python (frontend server)
-
+# Python
 # =========================
-
-**pycache**/
+__pycache__/
 *.pyc
 
 # =========================
-
 # Build / Temp
-
 # =========================
-
 dist/
 build/
 tmp/
 temp/
+debug/
 
 # =========================
-
 # Database
-
 # =========================
-
 *.sqlite
 *.db
 
 # =========================
-
 # ESP32 / Arduino
-
 # =========================
-
 *.bin
 *.elf
 *.map
@@ -102,27 +73,23 @@ temp/
 *.ino.cpp.d
 
 # =========================
-
 # Audio / Generated files
-
 # =========================
+*.wav
+*.mp3
+*.aac
+*.ogg
 
 frontend/assets/audio/*
 !frontend/assets/audio/.gitkeep
 
 # =========================
-
 # Screenshots / large files
-
 # =========================
-
 assets/screenshots/*
 !assets/screenshots/.gitkeep
 
 # =========================
-
 # Misc
-
 # =========================
-
 coverage/

@@ -1,12 +1,18 @@
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
+import multer from "multer";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 import { config } from "./config/env.js";
 import { textToSpeech } from "./services/tts.js";
 import { sendToFlowise } from "./services/flowiseClient.js";
+import { speechToText } from "./services/stt.js";
 
 const app = express();
+const upload = multer();
 
 // ==========================
 // 🔥 DEBUG ENV (REMOVER EM PROD)
@@ -14,16 +20,21 @@ const app = express();
 console.log("FLOWISE_URL:", process.env.FLOWISE_URL);
 console.log("FLOWISE_CHATFLOW_ID:", process.env.FLOWISE_CHATFLOW_ID);
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const DEBUG_DIR = path.join(__dirname, "debug");
+
+if (!fs.existsSync(DEBUG_DIR)) {
+  fs.mkdirSync(DEBUG_DIR);
+}
+
+
 // ==========================
 // 🔥 MIDDLEWARE
 // ==========================
 app.use(cors({ origin: config.FRONTEND_URL || "*" }));
 app.use(express.json({ limit: "15mb" }));
-
-app.use((req, res, next) => {
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
-  next();
-});
 
 // ==========================
 // 🔍 ROOT
@@ -37,10 +48,6 @@ app.get("/", (req, res) => {
 // ==========================
 function normalizeForESP32(text) {
   return text
-    .normalize("NFD") // separa acentos
-    .replace(/[\u0300-\u036f]/g, "") // remove acentos
-    .replace(/ç/g, "c")
-    .replace(/Ç/g, "C")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -59,7 +66,7 @@ function resolveReply(res) {
     res.outputs?.[0]?.output ||
     "";
 
-  // 🔥 PRIORIDADE: TOOL (melhor UX)
+  // 🔥 prioridade a tools
   if (res.usedTools?.length > 0) {
     try {
       const tool = JSON.parse(res.usedTools[0].toolOutput);
@@ -82,33 +89,26 @@ function resolveReply(res) {
 }
 
 // ==========================
-// 🎤 VOICE ENDPOINT
+// 🎤 GET (modo antigo - texto)
 // ==========================
 app.get("/api/voice", async (req, res) => {
   try {
-    const text = req.query.text;
+    let text = req.query.text;
     const sessionId = req.query.sessionId || "esp32";
     const ttsOnly = req.query.tts === "1";
 
-        // 🔥 FIX ENCODING
-    try {
-      text = decodeURIComponent(text);
-    } catch {
-      console.warn("⚠️ decodeURIComponent falhou");
-    }
-    
     if (!text) {
       return res.status(400).json({ error: "Missing text" });
     }
 
     console.log("📥 INPUT:", text);
 
-    // 🔊 TTS ONLY
+    // 🔊 só TTS
     if (ttsOnly) {
       return await textToSpeech(text, res);
     }
 
-    // 🧠 FLOWISE
+    // 🧠 Flowise
     const flowiseResponse = await sendToFlowise({
       question: text,
       sessionId
@@ -116,27 +116,22 @@ app.get("/api/voice", async (req, res) => {
 
     const rawReply = resolveReply(flowiseResponse);
 
-    // 🔥 TEXTO ORIGINAL (para áudio)
-    const replyForAudio = rawReply;
-
-    // 🔥 TEXTO LIMPO (para ESP32 display)
-    const safeReply = normalizeForESP32(rawReply);
+    // 🔥 preparar versões
     const safeText = normalizeForESP32(text);
+    const safeReply = normalizeForESP32(rawReply);
 
     console.log("🧠 FINAL:", safeReply);
 
-    // 🔥 HEADERS (ESP32 lê isto)
     const b64 = (str) => Buffer.from(str, "utf-8").toString("base64");
 
     res.setHeader("Connection", "close");
     res.setHeader("X-User-Text", b64(safeText));
     res.setHeader("X-AI-Reply", b64(safeReply));
 
-    // 🔊 ÁUDIO COM ACENTOS (IMPORTANTE)
-    return await textToSpeech(replyForAudio, res);
+    return await textToSpeech(rawReply, res);
 
   } catch (err) {
-    console.error("❌ ERROR:", err.message);
+    console.error("❌ GET ERROR:", err.message);
 
     return res.status(500).json({
       error: "Erro interno"
@@ -144,6 +139,118 @@ app.get("/api/voice", async (req, res) => {
   }
 });
 
+// ==========================
+// 🎤 POST (NOVO - áudio)
+// ==========================
+app.post("/api/voice", upload.single("file"), async (req, res) => {
+  try {
+    
+    const body = req.body || {};
+    const sessionId = body.sessionId || "esp32";
+    let text = body.text || null;
+
+    console.log("📥 INPUT:", {
+      hasAudio: !!req.file,
+      text
+    });
+
+    console.log("🎧 AUDIO SIZE:", req.file?.buffer?.length);
+    // ==========================
+    // 💾 GUARDAR AUDIO INPUT
+    // ==========================
+    if (req.file?.buffer) {
+      const data = Date.now();
+      const inputFile = path.join(DEBUG_DIR, `input_${data}.wav`);
+      fs.writeFileSync(inputFile, req.file.buffer);
+      console.log("💾 INPUT guardado:", inputFile);
+    }
+
+    // ==========================
+    // 🎤 STT
+    // ==========================
+    if (req.file) {
+      console.log("🎤 A converter áudio...");
+
+      text = await speechToText(req.file.buffer);
+
+      if (!text) {
+        return res.status(400).json({
+          error: "Não foi possível reconhecer o áudio"
+        });
+      }
+
+      console.log("📝 TEXTO:", text);
+    }
+
+    if (!text || text.trim() === "") {
+      return res.status(400).json({
+        error: "Sem texto"
+      });
+    }
+
+    // ==========================
+    // 🧠 FLOWISE
+    // ==========================
+    const flowiseResponse = await sendToFlowise({
+      question: text,
+      sessionId
+    });
+
+    const rawReply = resolveReply(flowiseResponse);
+
+    // ==========================
+    // 🔧 NORMALIZA
+    // ==========================
+    const safeText = normalizeForESP32(text);
+    const safeReply = normalizeForESP32(rawReply);
+
+    console.log("🧠 FINAL:", safeReply);
+
+    // ==========================
+    // 🔥 HEADERS
+    // ==========================
+    const b64 = (str) =>
+      Buffer.from(str, "utf-8").toString("base64");
+
+    res.setHeader("Connection", "close");
+    res.setHeader("X-User-Text", b64(safeText));
+    res.setHeader("X-AI-Reply", b64(safeReply));
+
+    // ==========================
+    // 🔊 TTS
+    // ==========================
+    return await textToSpeech(rawReply, res);
+
+  } catch (err) {
+    console.error("❌ POST ERROR:", err.message);
+
+    return res.status(500).json({
+      error: "Erro interno"
+    });
+  }
+});
+
+app.get("/api/tts", async (req, res) => {
+  try {
+    const text = req.query.text || "Olá, como posso ajudar?";
+
+    console.log("🔊 TTS GET:", text);
+
+    if (!text || text.trim() === "") {
+      return res.status(400).send("Texto vazio");
+    }
+
+    // 🔥 reutiliza a tua função existente
+    return await textToSpeech(text, res);
+
+  } catch (err) {
+    console.error("❌ /api/tts ERROR:", err.message);
+
+    if (!res.headersSent) {
+      res.status(500).send("Erro interno");
+    }
+  }
+});
 // ==========================
 // 🚀 START
 // ==========================
