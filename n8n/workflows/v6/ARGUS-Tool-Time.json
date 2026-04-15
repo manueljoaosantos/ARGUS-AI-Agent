@@ -1,0 +1,65 @@
+{
+  "name": "ARGUS-Tool-Time",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "time",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b726cd04-bfb3-4fda-bf8d-ee60859fb82e",
+      "name": "Webhook",
+      "webhookId": "2061d61b-69ff-4f6c-a104-b4e2046e08a3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\n\nreturn [\n  {\n    json: {\n      time: now.toLocaleTimeString(\"pt-PT\", {\n        hour: \"2-digit\",\n        minute: \"2-digit\",\n        timeZone: \"Europe/Lisbon\"\n      }),\n      date: now.toLocaleDateString(\"pt-PT\", {\n        timeZone: \"Europe/Lisbon\"\n      }),\n      timestamp: now.toISOString()\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "36d38a6d-bef7-4091-ba88-ab6f786b667f",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f9d6611a-5645-4bb1-b0fd-f54e74fbf1db",
+  "meta": {
+    "instanceId": "c0e59be407a96ee7e9a61711c08d00ee197dbfa1a07ef2ffc41fd0504b80a96a"
+  },
+  "id": "0Jt4m7eRlPhb9eK1",
+  "tags": []
+}

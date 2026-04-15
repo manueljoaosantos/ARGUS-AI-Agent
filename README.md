@@ -276,6 +276,9 @@ curl -X POST http://localhost:5678/webhook/ARGUSAgentRouter \
 -d '{"input":"Liga a luz da sala"}'
 ```
 
+Ver lista completa de testes em:
+👉 docs/testing/ARGUS-TEST-SUITE.md
+
 ---
 
 # 🚀 Estado do Projeto
