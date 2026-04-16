@@ -74,19 +74,26 @@ void tft_listening()
   if (millis() - animTimer < 80) return;
   animTimer = millis();
 
-  tft.fillRect(0, 100, tft.width(), 140, ST77XX_BLACK);
+  int screenW = tft.width();   // 👉 320
+  int screenH = tft.height();  // 👉 240
 
-  int baseY = 220;
+  tft.fillRect(0, 100, screenW, 140, ST77XX_BLACK);
 
-  for (int i = 0; i < 10; i++)
+  int baseY = screenH - 20; // mais adaptável
+
+  int numBars = 12; // mais barras fica melhor em 320px
+  int spacing = screenW / numBars;
+  int barWidth = spacing - 4;
+
+  for (int i = 0; i < numBars; i++)
   {
-    int x = 10 + i * 20;
+    int x = i * spacing + 2;
 
-    int h = random(10, 80);
+    int h = random(10, 100);
 
     uint16_t color = tft.color565(0, random(150,255), random(50,200));
 
-    tft.fillRect(x, baseY - h, 12, h, color);
+    tft.fillRect(x, baseY - h, barWidth, h, color);
   }
 }
 

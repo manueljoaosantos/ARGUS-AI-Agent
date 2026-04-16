@@ -1,0 +1,200 @@
+{
+  "name": "ARGUS-Tool-Memoria",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "memoria",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        1104,
+        272
+      ],
+      "id": "f9b1cb66-97db-49bd-b842-f70ac41c8b68",
+      "name": "Webhook",
+      "webhookId": "d4d9e342-1483-4203-9c1d-bac017e15806"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"text\": \"{{ $json.text }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1968,
+        272
+      ],
+      "id": "0a7e1081-9e13-4c16-89d3-ea59b7541005",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "conversations"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "session_id",
+              "value": "={{$json.sessionId}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1456,
+        272
+      ],
+      "id": "586cda10-b5bf-458e-a761-be8e62b0f231",
+      "name": "PostgreSQL (SELECT)",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "vAW446yotwYgCYxJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const text = $json.text || \"\";\nconst lower = text.toLowerCase();\n\nlet memory = $json.messages || { facts: [] };\n\n// garantir estrutura\nif (typeof memory === \"string\") {\n  try {\n    memory = JSON.parse(memory);\n  } catch {\n    memory = { facts: [] };\n  }\n}\n\nif (!memory.facts) {\n  memory.facts = [];\n}\n\n// =========================\n// 🔥 1. GUARDAR PLANOS (NOVO)\n// =========================\nif (lower.includes(\"vou\") && lower.includes(\"amanhã\")) {\n  const location = text.split(\"vou\")[1]?.trim();\n\n  const newFact = {\n    type: \"plan\",\n    location: location,\n    date: \"amanhã\"\n  };\n\n  memory.facts.push(newFact);\n\n  return {\n    json: {\n      messages: memory,\n      text: \"Guardei o teu plano.\"\n    }\n  };\n}\n\n// =========================\n// 🔥 2. PERGUNTAR PLANOS (NOVO)\n// =========================\nif (lower.includes(\"onde vou amanhã\")) {\n  const plan = memory.facts.find(f => f.type === \"plan\");\n\n  return {\n    json: {\n      text: plan\n        ? `Vais ${plan.location} amanhã.`\n        : \"Não tenho planos guardados.\"\n    }\n  };\n}\n\n// =========================\n// 🔥 3. MEMÓRIA GENÉRICA (ANTIGA)\n// =========================\nconst shouldStore =\n  lower.includes(\"meu\") ||\n  lower.includes(\"minha\") ||\n  lower.includes(\"vou\") ||\n  lower.includes(\"tenho\") ||\n  lower.includes(\"gosto\") ||\n  lower.includes(\"sou\") ||\n  lower.includes(\"prefiro\") ||\n  lower.includes(\"trabalho\") ||\n  lower.includes(\"moro\");\n\nconst isGeneralFact =\n  lower.includes(\"fica\") ||\n  lower.includes(\"é um\") ||\n  lower.includes(\"é uma\") ||\n  lower.includes(\"são\") ||\n  lower.includes(\"existe\");\n\n// guardar texto simples (se não for plano)\nif (shouldStore && !isGeneralFact) {\n  if (!memory.facts.includes(text)) {\n    memory.facts.push(text);\n  }\n\n  return {\n    json: {\n      messages: memory,\n      text: \"Guardei essa informação.\"\n    }\n  };\n}\n\n// =========================\n// 🔥 4. QUERY GENÉRICA\n// =========================\nconst queryKeywords = lower.split(\" \");\n\nlet found = memory.facts.find(fact => {\n  if (typeof fact !== \"string\") return false;\n\n  const f = fact.toLowerCase();\n  return queryKeywords.some(word => word.length > 3 && f.includes(word));\n});\n\nif (found) {\n  return {\n    json: {\n      text: found\n    }\n  };\n}\n\n// =========================\n// 🔥 FALLBACK\n// =========================\nreturn {\n  json: {\n    text: \"Não encontrei informação relevante.\"\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1616,
+        272
+      ],
+      "id": "3bd44737-c4c9-4fd9-936f-eb48cf13ca64",
+      "name": "Code (add assistant)"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO conversations (session_id, messages, updated_at)\nVALUES (\n  '{{$node[\"Webhook\"].json.body.sessionId}}',\n  '{{$json.messages.toJsonString()}}'::jsonb,\n  NOW()\n)\nON CONFLICT (session_id)\nDO UPDATE SET\n  messages = '{{$json.messages.toJsonString()}}'::jsonb,\n  updated_at = NOW();",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1792,
+        272
+      ],
+      "id": "358dc75d-182f-4eb1-9efe-5cf6e2d8ae62",
+      "name": "PostgreSQL (UPSERT)",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "vAW446yotwYgCYxJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"sessionId\": \"{{ $('Webhook').item.json.body.sessionId }}\"\n}",
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1296,
+        272
+      ],
+      "id": "712c252f-07ff-41dc-b4e9-ce000c78c4b7",
+      "name": "Extract Session",
+      "alwaysOutputData": false
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL (SELECT)": {
+      "main": [
+        [
+          {
+            "node": "Code (add assistant)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code (add assistant)": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL (UPSERT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL (UPSERT)": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Session": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL (SELECT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "70f1f202-05d6-42a3-991a-1db1ef24516c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c0e59be407a96ee7e9a61711c08d00ee197dbfa1a07ef2ffc41fd0504b80a96a"
+  },
+  "id": "FafsvNKessFBzs49",
+  "tags": []
+}
