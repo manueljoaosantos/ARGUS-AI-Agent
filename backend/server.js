@@ -10,6 +10,7 @@ import { config } from "./config/env.js";
 import { textToSpeech } from "./services/tts.js";
 import { sendToFlowise } from "./services/flowiseClient.js";
 import { speechToText } from "./services/stt.js";
+import { argusPrompt } from "./llm.js";
 
 const app = express();
 const upload = multer();
@@ -251,6 +252,49 @@ app.get("/api/tts", async (req, res) => {
     }
   }
 });
+
+app.get("/ai/test", async (req, res) => {
+  const result = await generateResponse([
+    {
+      role: "system",
+      content: "You are a helpful AI developer assistant.",
+    },
+    {
+      role: "user",
+      content: "Cria um endpoint simples em Node.js",
+    },
+  ]);
+
+  res.send(result);
+});
+
+app.post("/ai/create-n8n-flow", async (req, res) => {
+  const { description } = req.body;
+
+  const prompt = `
+    Cria um workflow para n8n com base nesta descrição:
+
+    "${description}"
+
+    Regras:
+    - Output deve ser apenas JSON válido
+    - Compatível com import do n8n
+    - Incluir nodes básicos (trigger, ação)
+    - Usar estrutura real do n8n (nodes, connections, etc.)
+    - Não incluir explicações
+
+    Formato esperado:
+    {
+      "nodes": [...],
+      "connections": {...}
+    }
+`;
+
+  const result = await argusPrompt(prompt);
+
+  res.json({ flow: result });
+});
+
 // ==========================
 // 🚀 START
 // ==========================
