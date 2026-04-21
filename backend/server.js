@@ -7,9 +7,11 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import { config } from "./config/env.js";
-import { textToSpeech } from "./services/tts.js";
+//import { textToSpeech } from "./services/tts.js";
 import { sendToFlowise } from "./services/flowiseClient.js";
-import { speechToText } from "./services/stt.js";
+//import { speechToText } from "./services/stt.js";
+import { speechToText } from "./services/stt/index.js";
+import { textToSpeech } from "./services/tts/index.js";
 import { argusPrompt } from "./llm.js";
 import mqttClient from "./services/mqttClient.js";
 import topics from "./services/topics.js";
