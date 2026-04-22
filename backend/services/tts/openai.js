@@ -12,6 +12,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export async function ttsOpenAI(text, res) {
+  let tmpMp3;
+  let tmpWav;
+
   try {
     const url = `${config.OPENAI_BASE_URL}/audio/speech`;
 
@@ -36,26 +39,32 @@ export async function ttsOpenAI(text, res) {
 
     const mp3Buffer = Buffer.from(raw);
 
-    const tmpMp3 = path.join(__dirname, `tmp_${Date.now()}.mp3`);
-    const tmpWav = path.join(__dirname, `tmp_${Date.now()}.wav`);
+    // 🔥 nomes únicos (evita colisões)
+    const id = process.hrtime.bigint();
+    tmpMp3 = path.join(__dirname, `tmp_${id}.mp3`);
+    tmpWav = path.join(__dirname, `tmp_${id}.wav`);
 
     fs.writeFileSync(tmpMp3, mp3Buffer);
 
+    // 🔥 conversão robusta
     await new Promise((resolve, reject) => {
       ffmpeg(tmpMp3)
+        .audioCodec("pcm_s16le")
         .audioFrequency(16000)
         .audioChannels(1)
-        .audioCodec("pcm_s16le")
         .format("wav")
+        .outputOptions([
+          "-f wav",
+          "-acodec pcm_s16le",
+          "-ar 16000",
+          "-ac 1"
+        ])
         .on("end", resolve)
         .on("error", reject)
         .save(tmpWav);
     });
 
     const wavBuffer = fs.readFileSync(tmpWav);
-
-    fs.unlinkSync(tmpMp3);
-    fs.unlinkSync(tmpWav);
 
     res.setHeader("Content-Type", "audio/wav");
     res.send(wavBuffer);
@@ -65,6 +74,19 @@ export async function ttsOpenAI(text, res) {
 
     if (!res.headersSent) {
       res.status(500).json({ error: "TTS falhou" });
+    }
+
+  } finally {
+    // 🔥 cleanup garantido (mesmo com erro)
+    try {
+      if (tmpMp3 && fs.existsSync(tmpMp3)) {
+        fs.unlinkSync(tmpMp3);
+      }
+      if (tmpWav && fs.existsSync(tmpWav)) {
+        fs.unlinkSync(tmpWav);
+      }
+    } catch (cleanupErr) {
+      console.error("⚠️ Cleanup error:", cleanupErr.message);
     }
   }
 }
