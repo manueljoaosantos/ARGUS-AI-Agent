@@ -72,13 +72,19 @@ export async function sendToFlowise(payload) {
 
     // 🔥 PRIORIDADE: TOOL (mais inteligente)
     if (data?.usedTools?.length > 0) {
-      try {
-        const toolData = JSON.parse(data.usedTools[0].toolOutput);
-        if (toolData.text) {
-          reply = toolData.text;
+      const raw = data.usedTools[0].toolOutput;
+
+      if (raw && raw.trim() !== "") {
+        try {
+          const toolData = JSON.parse(raw);
+
+          if (toolData.text) {
+            reply = toolData.text;
+          }
+        } catch {
+          // 🔥 fallback inteligente
+          reply = raw;
         }
-      } catch {
-        console.warn("⚠️ erro a parse toolOutput");
       }
     }
 

@@ -7,9 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import { config } from "./config/env.js";
-//import { textToSpeech } from "./services/tts.js";
 import { sendToFlowise } from "./services/flowiseClient.js";
-//import { speechToText } from "./services/stt.js";
 import { speechToText } from "./services/stt/index.js";
 import { textToSpeech } from "./services/tts/index.js";
 import { argusPrompt } from "./llm.js";
@@ -77,13 +75,17 @@ function resolveReply(res) {
 
   // 🔥 prioridade a tools
   if (res.usedTools?.length > 0) {
-    try {
-      const tool = JSON.parse(res.usedTools[0].toolOutput);
-      if (tool.text) {
-        reply = tool.text;
+    const raw = res.usedTools[0].toolOutput;
+
+    if (raw && raw.trim() !== "") {
+      try {
+        const tool = JSON.parse(raw);
+        if (tool?.text) {
+          reply = tool.text;
+        }
+      } catch {
+        reply = raw; // fallback
       }
-    } catch {
-      console.warn("⚠️ erro a parse toolOutput");
     }
   }
 
