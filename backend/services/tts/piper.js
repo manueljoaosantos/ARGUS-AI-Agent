@@ -54,7 +54,7 @@ export async function ttsPiper(text, res) {
     // ==========================
     // 🔊 CONVERTER RAW → WAV
     // ==========================
-    const sampleRate = 22050; // 🔥 ajusta ao teu modelo!
+    const sampleRate = config.PIPER_SAMPLE_RATE || 22050; // 🔥 ajusta ao teu modelo!
 
     const rawBuffer = fs.readFileSync(tmpRaw);
 

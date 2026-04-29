@@ -72,7 +72,9 @@ export async function handleVoice(req, res) {
     // ==========================
     // 🔊 TTS
     // ==========================
+  if (!res.headersSent) {
     return await textToSpeech(reply, res);
+  }
 
   } catch (err) {
     console.error("❌ VOICE ERROR:", err.message);

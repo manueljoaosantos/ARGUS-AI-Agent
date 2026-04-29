@@ -8,7 +8,7 @@ if (!fs.existsSync(DEBUG_DIR)) {
 }
 
 export function saveDebugAudio(buffer, prefix = "input") {
-  if (!process.env.DEBUG_AUDIO) return;
+  if (process.env.DEBUG_AUDIO !== "true") return;
 
   const timestamp = Date.now();
   const file = path.join(DEBUG_DIR, `${prefix}_${timestamp}.wav`);
